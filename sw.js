@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vweldcore-v2';
+const CACHE_NAME = 'vweldcore-v3';
 const ASSETS = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
