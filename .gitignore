@@ -3,3 +3,5 @@
 patch_app.py
 vw-site.css
 try-*
+patch_share.py
+*.bak[0-9].*

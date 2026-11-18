@@ -1,5 +1,5 @@
 // Bump VERSION on each release. Assets also refresh in the background (stale-while-revalidate).
-const VERSION = 'vweldcore-v6';
+const VERSION = 'vweldcore-v7';
 const CORE = [
   './', './index.html', './app.css', './app.js', './manifest.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png',

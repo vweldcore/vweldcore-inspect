@@ -238,9 +238,10 @@
         <button class="btn btn-primary sm" data-act="share" data-id="${esc(r.id)}">📲 Share Data</button>
       </div>
       <div class="row">
-        ${vu ? `<button class="btn btn-ok sm" data-act="video" data-id="${esc(r.id)}">🎥 Share Video</button>` : '<div></div>'}
+        <button class="btn btn-wa sm" data-act="wa" data-id="${esc(r.id)}">💬 WhatsApp Office</button>
         <button class="btn btn-danger sm" data-act="del" data-id="${esc(r.id)}">Delete</button>
-      </div></div>`;
+      </div>
+      ${vu ? `<button class="btn btn-ok sm" style="margin-top:8px" data-act="video" data-id="${esc(r.id)}">🎥 Share Video</button>` : ''}</div>`;
   }
   async function renderRecords() {
     await loadRecs();
@@ -287,27 +288,46 @@
     await sleep(400);
     window.print();
   }
+  // ---- Sharing helpers ----
+  // Chrome only lets Web Share send "safe" file types, so reports go as .txt (JSON text inside).
+  function summaryOf(r) {
+    return ['*VWELDCORE INNOVATIONS NIG LTD (RC 8909233)*', '*FIELD ASSESSMENT: ' + r.id + '*', 'Engineer: ' + r.engName + ' (' + r.engPhone + ')', 'Date: ' + r.date, 'Client: ' + r.client,
+      'Location: ' + r.location + ' (' + r.gps + ')', 'Service: ' + r.serviceType, 'Unit: ' + r.unitType + ' (' + r.capacity + ')', 'Gas: ' + r.gasType + ' | Power: ' + r.powerPhase,
+      'Readings: Suction ' + r.suctionPsi + ' PSI | Discharge ' + r.dischargePsi + ' PSI | ' + r.amps + 'A | ' + r.voltage + 'V | Temp ' + r.boxTemp + '°C', 'Compressor: ' + r.compStatus, 'Notes: ' + r.notes].join('\n');
+  }
+  function dl(file) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  async function sendFile(file, title, text) {
+    let why = '';
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ title, text, files: [file] }); toast('✅ Shared'); return 'shared'; }
+      catch (e) {
+        if (e && (e.name === 'AbortError' || /cancel/i.test(e.message || ''))) return 'cancelled';
+        why = (e && e.name) ? e.name : 'error';
+      }
+    } else { why = 'file sharing unsupported'; }
+    dl(file);
+    toast('Saved to Downloads. Attach it in WhatsApp (' + why + ')');
+    return 'saved';
+  }
   async function shareOne(id) {
     const r = allRecs.find(x => x.id === id); if (r === undefined) return;
     const { videoBlob: _v, ...clean } = r;
-    const summary = ['*VWELDCORE INNOVATIONS NIG LTD (RC 8909233)*', '*FIELD ASSESSMENT: ' + r.id + '*', 'Engineer: ' + r.engName + ' (' + r.engPhone + ')', 'Date: ' + r.date, 'Client: ' + r.client,
-      'Location: ' + r.location + ' (' + r.gps + ')', 'Service: ' + r.serviceType, 'Unit: ' + r.unitType + ' (' + r.capacity + ')', 'Gas: ' + r.gasType + ' | Power: ' + r.powerPhase,
-      'Readings: Suction ' + r.suctionPsi + ' PSI | Discharge ' + r.dischargePsi + ' PSI | ' + r.amps + 'A | ' + r.voltage + 'V | Temp ' + r.boxTemp + '°C', 'Compressor: ' + r.compStatus, 'Notes: ' + r.notes].join('\n');
-    const file = new File([JSON.stringify(clean, null, 2)], r.id + '_' + fileSafe(r.client) + '.json', { type: 'application/json' });
-    try {
-      if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ title: 'VWELDCORE Report ' + r.id, text: summary, files: [file] });
-      else window.open('https://wa.me/?text=' + encodeURIComponent(summary), '_blank', 'noopener');
-      await markExported(id);
-    } catch (e) { if (e && e.name !== 'AbortError') toast('Share failed'); }
+    const file = new File([JSON.stringify(clean, null, 2)], r.id + '_' + fileSafe(r.client) + '.json.txt', { type: 'text/plain' });
+    if ((await sendFile(file, 'VWELDCORE Report ' + r.id, summaryOf(r))) !== 'cancelled') await markExported(id);
+  }
+  function waText(id) {
+    const r = allRecs.find(x => x.id === id); if (r === undefined) return;
+    window.open('https://wa.me/' + CFG.WA + '?text=' + encodeURIComponent(summaryOf(r)), '_blank', 'noopener');
+    markExported(id);
   }
   async function shareVid(id) {
     const r = allRecs.find(x => x.id === id);
     if (r === undefined || (r.videoBlob instanceof Blob) === false) return;
     const file = new File([r.videoBlob], r.id + '_' + (r.videoName || 'fault.mp4'), { type: r.videoBlob.type || 'video/mp4' });
-    try {
-      if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ title: 'VWELDCORE Video ' + r.id, text: 'Fault video by ' + r.engName + ' for ' + r.client + ' (' + r.id + ')', files: [file] });
-      else toast('This browser cannot share files directly');
-    } catch (e) { if (e && e.name !== 'AbortError') toast('Share failed'); }
+    await sendFile(file, 'VWELDCORE Video ' + r.id, 'Fault video by ' + r.engName + ' for ' + r.client + ' (' + r.id + ')');
   }
   async function delRec(id) { if (confirm('Delete this record permanently?')) { await dbDel(id); renderRecords(); toast('Deleted'); } }
   // ---- end part 3 ----
@@ -317,14 +337,12 @@
     await loadRecs();
     if (allRecs.length === 0) { toast('No records to export'); return; }
     const clean = allRecs.map(({ videoBlob, ...rest }) => rest);
-    const name = 'VWELDCORE_Backup_' + new Date().toISOString().slice(0, 10) + '.json';
-    const file = new File([JSON.stringify(clean, null, 2)], name, { type: 'application/json' });
-    try {
-      if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ title: 'VWELDCORE Field Backup', files: [file] });
-      else { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
-    } catch (e) { if (e && e.name !== 'AbortError') toast('Export failed'); return; }
+    const name = 'VWELDCORE_Backup_' + new Date().toISOString().slice(0, 10) + '.json.txt';
+    const file = new File([JSON.stringify(clean, null, 2)], name, { type: 'text/plain' });
+    const res = await sendFile(file, 'VWELDCORE Field Backup', 'VWELDCORE field reports (' + clean.length + ')');
+    if (res === 'cancelled') return;
     for (const r of allRecs) { if (r.exported !== true) { r.exported = true; await dbPut(r); } }
-    await loadRecs(); toast('Exported ✔');
+    await loadRecs();
   }
   function cleanRecord(x) {
     if (x === null || typeof x !== 'object') return null;
@@ -409,7 +427,7 @@
     $('#recordsList').addEventListener('click', e => {
       const b = e.target.closest('[data-act]'); if (b === null) return;
       const id = b.dataset.id, a = b.dataset.act;
-      if (a === 'print') printCard(id); else if (a === 'share') shareOne(id); else if (a === 'video') shareVid(id); else if (a === 'del') delRec(id);
+      if (a === 'print') printCard(id); else if (a === 'share') shareOne(id); else if (a === 'video') shareVid(id); else if (a === 'wa') waText(id); else if (a === 'del') delRec(id);
     });
     $('#btnExport').addEventListener('click', exportAll);
     $('#importIn').addEventListener('change', importFile);
