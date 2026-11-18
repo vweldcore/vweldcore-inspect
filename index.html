@@ -11,52 +11,63 @@
   * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
   body { margin: 0; background: var(--bg); color: var(--text); padding: 12px; padding-bottom: 80px; }
   header { background: var(--card); padding: 14px; border-radius: 12px; border-left: 4px solid var(--accent); margin-bottom: 14px; }
-  header h1 { margin: 0; font-size: 1.1rem; }
+  header h1 { margin: 0; font-size: 1.05rem; }
   header p { margin: 4px 0 0; font-size: 0.75rem; color: var(--muted); }
   .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
-  .tab { flex: 1; padding: 10px; background: var(--card); border: 1px solid #334155; color: var(--text); border-radius: 8px; font-weight: 600; text-align: center; cursor: pointer; }
+  .tab { flex: 1; padding: 10px; background: var(--card); border: 1px solid #334155; color: var(--text); border-radius: 8px; font-weight: 600; text-align: center; cursor: pointer; font-size: 0.85rem; }
   .tab.active { background: var(--accent); border-color: var(--accent); }
   .card { background: var(--card); padding: 14px; border-radius: 12px; margin-bottom: 12px; }
   .card h3 { margin: 0 0 10px; font-size: 0.95rem; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 6px; }
   label { display: block; font-size: 0.8rem; color: var(--muted); margin: 8px 0 4px; }
   input, select, textarea { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: var(--text); font-size: 0.9rem; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer; margin-top: 8px; }
+  .btn { width: 100%; padding: 11px; border: none; border-radius: 8px; font-weight: 700; font-size: 0.88rem; cursor: pointer; margin-top: 8px; }
   .btn-primary { background: var(--accent); color: white; }
   .btn-success { background: var(--ok); color: #064e3b; }
+  .btn-warn { background: #f59e0b; color: #451a03; }
   .btn-outline { background: transparent; border: 1px solid var(--accent); color: #38bdf8; }
-  canvas { background: #ffffff; border-radius: 8px; width: 100%; height: 120px; touch-action: none; }
+  canvas { background: #ffffff; border-radius: 8px; width: 100%; height: 110px; touch-action: none; }
   .record-item { background: #0f172a; padding: 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #334155; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; background: #0284c733; color: #38bdf8; }
   img.preview, video.preview { width: 100%; border-radius: 8px; margin-top: 8px; max-height: 200px; background: #000; }
   .hidden { display: none; }
+  @media print {
+    body { background: #fff; color: #000; padding: 0; }
+    header, .tabs, #view-new, #view-saved, #view-transfer { display: none !important; }
+    #print-sheet { display: block !important; color: #000; font-family: Arial, sans-serif; padding: 16px; }
+  }
 </style>
 </head>
 <body>
 <header>
   <h1>VWELDCORE INNOVATIONS NIG LTD</h1>
-  <p>RC 8909233 • Offline HVAC & Refrigeration Field Assessment</p>
+  <p>RC 8909233 • Olota Junction, Abule Egba, Lagos • Field Assessment</p>
 </header>
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('new')">+ New Assessment</div>
+  <div class="tab active" onclick="switchTab('new')">+ Inspect</div>
   <div class="tab" onclick="switchTab('saved')">Saved (<span id="count">0</span>)</div>
-  <div class="tab" onclick="switchTab('transfer')">Import / Sync</div>
+  <div class="tab" onclick="switchTab('transfer')">Sync / Backup</div>
 </div>
 <div id="view-new">
   <div class="card">
-    <h3>1. Client & Site Details</h3>
+    <h3>1. Field Engineer & Client Details</h3>
+    <div class="row">
+      <div><label>Field Engineer / Staff Name *</label><input type="text" id="engName" placeholder="e.g. Engr. Tunde"></div>
+      <div><label>Engineer Phone</label><input type="tel" id="engPhone" placeholder="080..."></div>
+    </div>
     <label>Client / Facility Name *</label>
     <input type="text" id="clientName" placeholder="e.g. Eko Cold Logistics / Mr. Ade">
     <div class="row">
-      <div><label>Site Location</label><input type="text" id="location" placeholder="Area / City"></div>
+      <div><label>Site Location</label><input type="text" id="location" placeholder="Area / State"></div>
       <div><label>GPS Coordinates</label><button type="button" class="btn btn-outline" style="margin-top:0;padding:10px" onclick="getGPS()" id="gpsBtn">📍 Capture GPS</button></div>
     </div>
-    <label>Service Category</label>
+    <label>Assessment Purpose</label>
     <select id="serviceType">
-      <option value="Routine Servicing">Routine Preventive Servicing</option>
-      <option value="Breakdown / Repair">Fault Diagnosis & Repair</option>
-      <option value="Gas Charging / Leak">Refrigerant Recharge & Leak Test</option>
-      <option value="Compressor Overhaul">Compressor / Condenser Replacement</option>
+      <option value="Routine Preventive Servicing">Routine Preventive Servicing</option>
+      <option value="Breakdown / Fault Diagnosis">Breakdown / Fault Diagnosis</option>
+      <option value="Refrigerant Recharge & Leak Test">Refrigerant Recharge & Leak Test</option>
+      <option value="Compressor / Condenser Overhaul">Compressor / Condenser Overhaul</option>
+      <option value="Pre-Installation Site Survey">Pre-Installation Site Survey</option>
     </select>
   </div>
   <div class="card">
@@ -64,13 +75,8 @@
     <div class="row">
       <div><label>Unit Type</label>
         <select id="unitType">
-          <option>Split / Standing AC</option>
-          <option>Package / Central AC</option>
-          <option>Walk-In Chiller</option>
-          <option>Cold Room / Blast Freezer</option>
-          <option>Ice Block Machine</option>
-          <option>Industrial Water Chiller</option>
-          <option>Commercial Fridge / Display</option>
+          <option>Split / Standing AC</option><option>Package / Central AC</option><option>Walk-In Chiller</option>
+          <option>Cold Room / Blast Freezer</option><option>Ice Block Machine</option><option>Industrial Water Chiller</option><option>Commercial Fridge / Display</option>
         </select>
       </div>
       <div><label>Capacity (HP / Tons / L)</label><input type="text" id="capacity" placeholder="e.g. 2HP / 5 Ton / 800L"></div>
@@ -100,26 +106,56 @@
         <select id="compStatus"><option>Good / Pumping Well</option><option>Weak Pumping / Noisy</option><option>Grounded / Burned Out</option><option>Tripping on Overload</option></select>
       </div>
     </div>
-    <label>Faults Observed & Parts Needed</label>
-    <textarea id="notes" rows="3" placeholder="Describe coil condition, contactor, capacitor, insulation, or leaks..."></textarea>
+    <label>Faults Observed & Parts / Materials Required</label>
+    <textarea id="notes" rows="3" placeholder="List faulty parts, gas kg needed, copper pipe, contactor, capacitor..."></textarea>
   </div>
   <div class="card">
-    <h3>4. Field Photo, Video & Sign-Off</h3>
+    <h3>4. Photo, Video & Client/Engineer Sign-Off</h3>
     <label>📸 Capture Nameplate / Fault Photo</label>
     <input type="file" accept="image/*" capture="environment" onchange="processPhoto(event)">
     <img id="photoPreview" class="preview hidden">
-
-    <label>🎥 Record / Attach Fault Video (Compressor sound, leak, ice)</label>
+    <label>🎥 Record / Attach Fault Video</label>
     <input type="file" accept="video/*" capture="environment" onchange="processVideo(event)">
     <video id="videoPreview" class="preview hidden" controls playsinline></video>
     <div id="videoInfo" style="font-size:0.75rem;color:#38bdf8;margin-top:4px"></div>
-
-    <label>Technician / Client Signature</label>
+    <label>Client / Site Representative Signature</label>
     <canvas id="sigPad"></canvas>
     <button type="button" class="btn btn-outline" style="padding:6px;font-size:0.8rem" onclick="clearSig()">Clear Signature</button>
   </div>
   <button class="btn btn-success" onclick="saveAssessment()">💾 SAVE ASSESSMENT OFFLINE</button>
 </div>
+  const summary = `*VWELDCORE INNOVATIONS NIG LTD (RC 8909233)*\n*FIELD ASSESSMENT: ${r.id}*\nEngineer: ${r.engName} (${r.engPhone})\nDate: ${r.date}\nClient: ${r.client}\nLocation: ${r.location} (${r.gps})\nService: ${r.serviceType}\nUnit: ${r.unitType} (${r.capacity})\nGas: ${r.gasType} | Power: ${r.powerPhase}\nReadings: Suction ${r.suctionPsi} PSI | Discharge ${r.dischargePsi} PSI | ${r.amps}A | ${r.voltage}V | Temp ${r.boxTemp}°C\nCompressor: ${r.compStatus}\nNotes: ${r.notes}`;
+  const file = new File([JSON.stringify(cleanRecord, null, 2)], `${r.id}_${r.client.replace(/\s+/g,'_')}.json`, { type: 'application/json' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    await navigator.share({ title: `VWELDCORE Report ${r.id}`, text: summary, files: [file] });
+  } else { window.open(`https://wa.me{encodeURIComponent(summary)}`); }
+}
+
+async function shareVideo(id) {
+  const db = await dbGetAll(); const r = db.find(x => x.id === id);
+  if (rm -f ~/vweldcore/b2b-closer.js ~/vweldcore/robots.txt ~/vweldcore/sitemap.xml && rm -rf ~/vweldcore/.github && echo "=== ALL REPOS IN HOME ===" && find ~ -maxdepth 3 -name ".git" -exec dirname {} \; && echo "=== ALL HTML/WEB FILES IN HOME ===" && find ~ -maxdepth 3 \( -name "index.html" -o -name "index.php" -o -name "App.jsx" -o -name "page.tsx" -o -name "CNAME" \) 2>/dev/null || !r.videoBlob) return;
+  const file = new File([r.videoBlob], `${r.id}_${r.videoName || 'fault.mp4'}`, { type: r.videoBlob.type || 'video/mp4' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    await navigator.share({ title: `VWELDCORE Video ${r.id}`, text: `Fault Video by ${r.engName} for ${r.client} (${r.id})`, files: [file] });
+  } else { alert("Browser does not support direct file sharing."); }
+}
+
+async function exportAll() {
+  const db = await dbGetAll(); if (!db.length) return alert("No records to export.");
+  const cleanAll = db.map(({ videoBlob, ...rest }) => rest);
+  const file = new File([JSON.stringify(cleanAll, null, 2)], `VWELDCORE_Backup_${new Date().toISOString().slice(0,10)}.json`, { type: 'application/json' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    await navigator.share({ title: 'VWELDCORE Field Backup', files: [file] });
+  } else { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; a.click(); }
+}
+
+function importFile(e) {
+  const file = e.target.files; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    try {
+      const incoming = JSON.parse(ev.target.result);
+      const items = Array.isArray(incoming) ? incoming : [incoming];
       const db = await dbGetAll(), existingIds = new Set(db.map(x => x.id));
       let added = 0;
       for (const item of items) { if (item.id && !existingIds.has(item.id)) { await dbPut(item); added++; } }
