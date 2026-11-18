@@ -124,52 +124,183 @@
   </div>
   <button class="btn btn-success" onclick="saveAssessment()">💾 SAVE ASSESSMENT OFFLINE</button>
 </div>
+<div id="view-saved" class="hidden"><div id="recordsList"></div></div>
+<div id="view-transfer" class="hidden">
+  <div class="card">
+    <h3>Send Assessments to VWELDCORE Office</h3>
+    <p style="font-size:0.85rem;color:var(--muted)">Export all inspection records + photos as a single <code>.json</code> file to send via WhatsApp or Bluetooth.</p>
+    <button class="btn btn-primary" onclick="exportAll()">📤 Export All Reports (.json)</button>
+  </div>
+  <div class="card">
+    <h3>Import Field Engineer Report</h3>
+    <p style="font-size:0.85rem;color:var(--muted)">Load a <code>.json</code> file sent by a field staff member to view or print their official PDF Job Card.</p>
+    <input type="file" accept=".json" onchange="importFile(event)">
+  </div>
+</div>
+<div id="print-sheet" class="hidden"></div>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
+const DB_NAME = 'VWELDCORE_DB', STORE = 'assessments';
+function openDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(STORE, { keyPath: 'id' });
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+async function dbGetAll() {
+  const db = await openDB();
+  return new Promise(res => { const r = db.transaction(STORE, 'readonly').objectStore(STORE).getAll(); r.onsuccess = () => res(r.result.reverse()); });
+}
+async function dbPut(item) {
+  const db = await openDB();
+  return new Promise(res => { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(item); tx.oncomplete = () => res(); });
+}
+async function dbDelete(id) {
+  const db = await openDB();
+  return new Promise(res => { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(id); tx.oncomplete = () => res(); });
+}
+let currentPhoto = "", currentVideoBlob = null, currentVideoName = "", currentGPS = "Not captured";
+const canvas = document.getElementById('sigPad'), ctx = canvas.getContext('2d');
+let drawing = false;
+function resizeCanvas() { canvas.width = canvas.offsetWidth; canvas.height = 110; ctx.lineWidth = 2.5; ctx.strokeStyle = '#0f172a'; }
+window.addEventListener('load', () => { resizeCanvas(); renderRecords(); });
+canvas.addEventListener('pointerdown', e => { drawing = true; ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY); });
+canvas.addEventListener('pointermove', e => { if (drawing) { ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke(); } });
+canvas.addEventListener('pointerup', () => drawing = false);
+function clearSig() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+function getGPS() {
+  const btn = document.getElementById('gpsBtn'); btn.innerText = "Locating...";
+  navigator.geolocation.getCurrentPosition(
+    pos => { currentGPS = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`; btn.innerText = "✅ " + currentGPS; },
+    () => { btn.innerText = "⚠️ GPS Off"; alert("Enable phone location/GPS."); },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+}
+function processPhoto(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'), scale = Math.min(800 / img.width, 1);
+      c.width = img.width * scale; c.height = img.height * scale;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      currentPhoto = c.toDataURL('image/jpeg', 0.65);
+      const prev = document.getElementById('photoPreview'); prev.src = currentPhoto; prev.classList.remove('hidden');
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function processVideo(e) {
+  const file = e.target.files[0]; if (!file) return;
+  currentVideoBlob = file; currentVideoName = file.name || `video_${Date.now()}.mp4`;
+  const prev = document.getElementById('videoPreview'); prev.src = URL.createObjectURL(file); prev.classList.remove('hidden');
+  document.getElementById('videoInfo').innerText = `✅ Video ready (${(file.size / 1048576).toFixed(1)} MB)`;
+}
+async function saveAssessment() {
+  const eng = document.getElementById('engName').value.trim();
+  const client = document.getElementById('clientName').value.trim();
+  if (!eng || !client) return alert("Enter both Field Engineer Name and Client Name");
+  const record = {
+    id: 'VW-' + Date.now().toString().slice(-6), date: new Date().toLocaleString('en-NG'),
+    engName: eng, engPhone: document.getElementById('engPhone').value,
+    client, location: document.getElementById('location').value, gps: currentGPS,
+    serviceType: document.getElementById('serviceType').value, unitType: document.getElementById('unitType').value,
+    capacity: document.getElementById('capacity').value, gasType: document.getElementById('gasType').value,
+    powerPhase: document.getElementById('powerPhase').value, suctionPsi: document.getElementById('suctionPsi').value,
+    dischargePsi: document.getElementById('dischargePsi').value, amps: document.getElementById('amps').value,
+    voltage: document.getElementById('voltage').value, boxTemp: document.getElementById('boxTemp').value,
+    compStatus: document.getElementById('compStatus').value, notes: document.getElementById('notes').value,
+    photo: currentPhoto, videoBlob: currentVideoBlob, videoName: currentVideoName, signature: canvas.toDataURL()
+  };
+  await dbPut(record); currentVideoBlob = null; currentPhoto = "";
+  alert("✅ Saved Offline! Job Card ID: " + record.id); switchTab('saved');
+}
+async function renderRecords() {
+  const db = await dbGetAll(); document.getElementById('count').innerText = db.length;
+  const list = document.getElementById('recordsList');
+  if (!db.length) { list.innerHTML = '<div class="card">No assessments saved yet.</div>'; return; }
+  list.innerHTML = db.map(r => {
+    const vidUrl = r.videoBlob ? URL.createObjectURL(r.videoBlob) : '';
+    return `<div class="record-item">
+      <div style="display:flex;justify-content:space-between"><strong>${r.client}</strong><span class="badge">${r.id}</span></div>
+      <div style="font-size:0.78rem;color:#38bdf8;margin-top:2px">Field Staff: ${r.engName || 'N/A'} (${r.engPhone || '-'})</div>
+      <div style="font-size:0.8rem;color:var(--muted);margin:4px 0">${r.date} • ${r.unitType} (${r.capacity})</div>
+      <div style="font-size:0.8rem">Gas: <b>${r.gasType}</b> | Amps: <b>${r.amps || '-'}A</b> | Temp: <b>${r.boxTemp || '-'}°C</b></div>
+      <div style="font-size:0.8rem;color:#cbd5e1;margin-top:4px">${r.notes || ''}</div>
+      ${r.photo ? `<img src="${r.photo}" class="preview">` : ''}${vidUrl ? `<video src="${vidUrl}" class="preview" controls playsinline></video>` : ''}
+      <div class="row" style="margin-top:8px">
+        <button class="btn btn-warn" style="padding:8px;font-size:0.8rem" onclick="printJobCard('${r.id}')">📄 PDF Job Card</button>
+        <button class="btn btn-primary" style="padding:8px;font-size:0.8rem" onclick="shareSingle('${r.id}')">📲 Share Data</button>
+      </div>
+      <div class="row" style="margin-top:4px">
+        ${r.videoBlob ? `<button class="btn btn-success" style="padding:7px;font-size:0.78rem" onclick="shareVideo('${r.id}')">🎥 Share Video</button>` : '<div></div>'}
+        <button class="btn btn-outline" style="padding:7px;font-size:0.78rem;border-color:#ef4444;color:#f87171" onclick="deleteRec('${r.id}')">Delete</button>
+      </div></div>`;
+  }).join('');
+}
+async function printJobCard(id) {
+  const db = await dbGetAll(); const r = db.find(x => x.id === id); if (!r) return;
+  document.getElementById('print-sheet').innerHTML = `
+    <div style="border:2px solid #0284c7;padding:16px;border-radius:6px">
+      <div style="display:flex;justify-content:space-between;border-bottom:2px solid #0f172a;padding-bottom:8px">
+        <div><h2 style="margin:0;color:#0284c7">VWELDCORE INNOVATIONS NIG LTD</h2>
+        <div style="font-size:12px">RC 8909233 • Olota Junction, Abule Egba, Lagos • +234 906 877 1239</div></div>
+        <div style="text-align:right"><strong>FIELD JOB CARD</strong><br>ID: ${r.id}<br><span style="font-size:11px">${r.date}</span></div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:13px" border="1" cellpadding="6">
+        <tr><td><b>Client / Facility:</b> ${r.client}</td><td><b>Location / GPS:</b> ${r.location} (${r.gps})</td></tr>
+        <tr><td><b>Field Engineer:</b> ${r.engName || '-'} (${r.engPhone || '-'})</td><td><b>Service Type:</b> ${r.serviceType}</td></tr>
+        <tr><td><b>Equipment:</b> ${r.unitType} (${r.capacity})</td><td><b>Gas / Power:</b> ${r.gasType} / ${r.powerPhase}</td></tr>
+        <tr><td><b>Pressures:</b> Suction ${r.suctionPsi || '-'} PSI | Discharge ${r.dischargePsi || '-'} PSI</td><td><b>Electrical / Temp:</b> ${r.amps || '-'}A | ${r.voltage || '-'}V | ${r.boxTemp || '-'}°C</td></tr>
+        <tr><td colspan="2"><b>Compressor Status:</b> ${r.compStatus}</td></tr>
+        <tr><td colspan="2"><b>Observations & Parts Required:</b><br>${r.notes || 'None'}</td></tr>
+      </table>
+      ${r.photo ? `<div style="margin-top:10px"><b>Site Photo:</b><br><img src="${r.photo}" style="max-height:180px;border:1px solid #ccc"></div>` : ''}
+      <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:flex-end">
+        <div><b>Client / Site Sign-Off:</b><br><img src="${r.signature}" style="height:60px;border-bottom:1px solid #000"></div>
+        <div style="font-size:11px;color:#555">Generated Offline via VWELDCORE Field QC</div>
+      </div>
+    </div>`;
+  window.print();
+}
+async function shareSingle(id) {
+  const db = await dbGetAll(); const r = db.find(x => x.id === id); const { videoBlob, ...cleanRecord } = r;
   const summary = `*VWELDCORE INNOVATIONS NIG LTD (RC 8909233)*\n*FIELD ASSESSMENT: ${r.id}*\nEngineer: ${r.engName} (${r.engPhone})\nDate: ${r.date}\nClient: ${r.client}\nLocation: ${r.location} (${r.gps})\nService: ${r.serviceType}\nUnit: ${r.unitType} (${r.capacity})\nGas: ${r.gasType} | Power: ${r.powerPhase}\nReadings: Suction ${r.suctionPsi} PSI | Discharge ${r.dischargePsi} PSI | ${r.amps}A | ${r.voltage}V | Temp ${r.boxTemp}°C\nCompressor: ${r.compStatus}\nNotes: ${r.notes}`;
   const file = new File([JSON.stringify(cleanRecord, null, 2)], `${r.id}_${r.client.replace(/\s+/g,'_')}.json`, { type: 'application/json' });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    await navigator.share({ title: `VWELDCORE Report ${r.id}`, text: summary, files: [file] });
-  } else { window.open(`https://wa.me{encodeURIComponent(summary)}`); }
+  if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ title: `VWELDCORE Report ${r.id}`, text: summary, files: [file] }); }
+  else { window.open(`https://wa.me{encodeURIComponent(summary)}`); }
 }
-
 async function shareVideo(id) {
-  const db = await dbGetAll(); const r = db.find(x => x.id === id);
-  if (rm -f ~/vweldcore/b2b-closer.js ~/vweldcore/robots.txt ~/vweldcore/sitemap.xml && rm -rf ~/vweldcore/.github && echo "=== ALL REPOS IN HOME ===" && find ~ -maxdepth 3 -name ".git" -exec dirname {} \; && echo "=== ALL HTML/WEB FILES IN HOME ===" && find ~ -maxdepth 3 \( -name "index.html" -o -name "index.php" -o -name "App.jsx" -o -name "page.tsx" -o -name "CNAME" \) 2>/dev/null || !r.videoBlob) return;
+  const db = await dbGetAll(); const r = db.find(x => x.id === id); if (rm -f ~/vweldcore/b2b-closer.js ~/vweldcore/robots.txt ~/vweldcore/sitemap.xml && rm -rf ~/vweldcore/.github && echo "=== ALL REPOS IN HOME ===" && find ~ -maxdepth 3 -name ".git" -exec dirname {} \; && echo "=== ALL HTML/WEB FILES IN HOME ===" && find ~ -maxdepth 3 \( -name "index.html" -o -name "index.php" -o -name "App.jsx" -o -name "page.tsx" -o -name "CNAME" \) 2>/dev/null || !r.videoBlob) return;
   const file = new File([r.videoBlob], `${r.id}_${r.videoName || 'fault.mp4'}`, { type: r.videoBlob.type || 'video/mp4' });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    await navigator.share({ title: `VWELDCORE Video ${r.id}`, text: `Fault Video by ${r.engName} for ${r.client} (${r.id})`, files: [file] });
-  } else { alert("Browser does not support direct file sharing."); }
+  if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ title: `VWELDCORE Video ${r.id}`, text: `Fault Video by ${r.engName} for ${r.client} (${r.id})`, files: [file] }); }
+  else { alert("Browser does not support direct file sharing."); }
 }
-
 async function exportAll() {
   const db = await dbGetAll(); if (!db.length) return alert("No records to export.");
   const cleanAll = db.map(({ videoBlob, ...rest }) => rest);
   const file = new File([JSON.stringify(cleanAll, null, 2)], `VWELDCORE_Backup_${new Date().toISOString().slice(0,10)}.json`, { type: 'application/json' });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    await navigator.share({ title: 'VWELDCORE Field Backup', files: [file] });
-  } else { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; a.click(); }
+  if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ title: 'VWELDCORE Field Backup', files: [file] }); }
+  else { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; a.click(); }
 }
-
 function importFile(e) {
-  const file = e.target.files; if (!file) return;
+  const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = async ev => {
     try {
-      const incoming = JSON.parse(ev.target.result);
-      const items = Array.isArray(incoming) ? incoming : [incoming];
-      const db = await dbGetAll(), existingIds = new Set(db.map(x => x.id));
-      let added = 0;
+      const incoming = JSON.parse(ev.target.result); const items = Array.isArray(incoming) ? incoming : [incoming];
+      const db = await dbGetAll(), existingIds = new Set(db.map(x => x.id)); let added = 0;
       for (const item of items) { if (item.id && !existingIds.has(item.id)) { await dbPut(item); added++; } }
       alert(`✅ Imported ${added} new assessment(s)!`); switchTab('saved');
     } catch { alert("Invalid VWELDCORE JSON file."); }
   };
   reader.readAsText(file);
 }
-
-async function deleteRec(id) {
-  if (!confirm("Delete this record?")) return;
-  await dbDelete(id); renderRecords();
-}
-
+async function deleteRec(id) { if (confirm("Delete this record?")) { await dbDelete(id); renderRecords(); } }
 function switchTab(tab) {
   ['new', 'saved', 'transfer'].forEach(t => document.getElementById('view-' + t).classList.toggle('hidden', t !== tab));
   document.querySelectorAll('.tab').forEach((el, i) => el.classList.toggle('active', ['new', 'saved', 'transfer'][i] === tab));
